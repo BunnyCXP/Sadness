@@ -62,6 +62,8 @@ public class CameraSwitch : MonoBehaviour
         if (movieCamera != null)
             movieCamera.gameObject.SetActive(false);
 
+        SetIllusionModeForAll(false);
+
         if (whiteFlashGroup != null)
             whiteFlashGroup.alpha = 0f;
 
@@ -77,6 +79,46 @@ public class CameraSwitch : MonoBehaviour
         if (!isTransitioning)
         {
             StartCoroutine(PlayCinematicTransition());
+        }
+    }
+
+    public void ExitMovieMode()
+    {
+        if (movieCamera != null)
+            movieCamera.gameObject.SetActive(false);
+
+        if (roomCamera != null)
+            roomCamera.gameObject.SetActive(true);
+
+        if (interactionManager != null)
+            interactionManager.canInteract = false;
+
+        SetIllusionModeForAll(false);
+        isTransitioning = false;
+    }
+
+    private void OnDisable()
+    {
+        SetIllusionModeForAll(false);
+    }
+
+    private void SetIllusionModeForAll(bool isActive)
+    {
+        if (illusionBlocks != null)
+        {
+            for (int i = 0; i < illusionBlocks.Length; i++)
+            {
+                if (illusionBlocks[i] != null)
+                    illusionBlocks[i].SetIllusionMode(isActive);
+            }
+        }
+
+        IllusionBlock[] sceneBlocks = FindObjectsByType<IllusionBlock>(FindObjectsSortMode.None);
+
+        for (int i = 0; i < sceneBlocks.Length; i++)
+        {
+            if (sceneBlocks[i] != null)
+                sceneBlocks[i].SetIllusionMode(isActive);
         }
     }
 
@@ -189,11 +231,7 @@ public class CameraSwitch : MonoBehaviour
 
         movieCamera.orthographicSize = movieStartSize;
 
-        foreach (IllusionBlock block in illusionBlocks)
-        {
-            if (block != null)
-                block.SetIllusionMode(true);
-        }
+        SetIllusionModeForAll(true);
 
         // 4. 闪白消退
         elapsed = 0f;
@@ -246,11 +284,11 @@ public class CameraSwitch : MonoBehaviour
         if (interactionManager != null)
         {
             interactionManager.canInteract = true;
-            Debug.Log("🔓 交互已解锁！");
+            Debug.Log("交互已解锁！");
         }
         else
         {
-            Debug.LogError("❌ CameraSwitch 找不到 InteractionManager，请检查面板拖拽！");
+            Debug.LogError("CameraSwitch 找不到 InteractionManager，请检查面板拖拽！");
         }
     }
 }
