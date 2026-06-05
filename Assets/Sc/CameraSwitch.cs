@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
+using System;
 
 public class CameraSwitch : MonoBehaviour
 {
@@ -45,6 +46,9 @@ public class CameraSwitch : MonoBehaviour
 
     [Header("交互管理器")]
     public InteractionManager interactionManager;
+
+    [Header("电影内开场序章")]
+    public OpeningTrainCinematicSequence openingTrainSequence;
 
     private bool isTransitioning = false;
     private Vector3 roomInitialPos;
@@ -212,6 +216,7 @@ public class CameraSwitch : MonoBehaviour
         bottomBar.sizeDelta = new Vector2(bottomBar.sizeDelta.x, maxBarHeight);
 
         // 2. 闪白进入
+        Debug.Log("CameraSwitch: white flash started");
         elapsed = 0f;
         float flashInDuration = 0.1f;
 
@@ -229,9 +234,13 @@ public class CameraSwitch : MonoBehaviour
         roomCamera.gameObject.SetActive(false);
         movieCamera.gameObject.SetActive(true);
 
-        movieCamera.orthographicSize = movieStartSize;
-
         SetIllusionModeForAll(true);
+
+        if (openingTrainSequence != null)
+        {
+            Debug.Log("CameraSwitch: preparing opening train focus during white flash");
+            openingTrainSequence.PrepareForWhiteReveal();
+        }
 
         // 4. 闪白消退
         elapsed = 0f;
@@ -247,19 +256,65 @@ public class CameraSwitch : MonoBehaviour
 
         whiteFlashGroup.alpha = 0f;
 
-        // 5. 保持电影特写
-        yield return new WaitForSeconds(stayAtStartDuration);
+        Debug.Log("CameraSwitch: white flash finished, playing opening train sequence");
+        if (openingTrainSequence != null)
+        {
+            yield return StartCoroutine(openingTrainSequence.PlayAfterWhiteReveal());
 
-        // 6. 电影镜头缓慢拉远 + 黑框收回
-        elapsed = 0f;
+            Debug.Log("CameraSwitch: opening sequence finished, starting camera restore and letterbox retract");
+
+            bool cameraRestoreDone = false;
+            bool letterboxDone = false;
+
+            StartCoroutine(RunCameraRestore(() => cameraRestoreDone = true));
+            StartCoroutine(RunLetterboxRetract(() => letterboxDone = true));
+
+            while (!cameraRestoreDone || !letterboxDone)
+                yield return null;
+
+            openingTrainSequence.RestorePlayerControl();
+            Debug.Log("CameraSwitch: outro finished, player control enabled");
+        }
+        else
+        {
+            Debug.Log("CameraSwitch: no opening sequence, continue default cinematic flow");
+            yield return new WaitForSeconds(stayAtStartDuration);
+
+            yield return StartCoroutine(RetractLetterbox());
+
+            if (interactionManager != null)
+                interactionManager.canInteract = true;
+            else
+                Debug.LogError("CameraSwitch 找不到 InteractionManager，请检查面板拖拽！");
+        }
+
+        isTransitioning = false;
+    }
+
+    IEnumerator RunCameraRestore(Action onComplete)
+    {
+        if (openingTrainSequence != null)
+            yield return StartCoroutine(openingTrainSequence.RestoreCameraAfterIntroSmooth(openingTrainSequence.cameraRestoreDuration));
+
+        onComplete?.Invoke();
+    }
+
+    IEnumerator RunLetterboxRetract(Action onComplete)
+    {
+        yield return StartCoroutine(RetractLetterbox());
+        onComplete?.Invoke();
+    }
+
+    IEnumerator RetractLetterbox()
+    {
+        // 5. 电影镜头保持 / 序章结束后，黑框收回
+        float elapsed = 0f;
 
         while (elapsed < returnDuration)
         {
             elapsed += Time.deltaTime;
             float t = Mathf.Clamp01(elapsed / returnDuration);
             float smoothT = Mathf.SmoothStep(0f, 1f, t);
-
-            movieCamera.orthographicSize = Mathf.Lerp(movieStartSize, movieFinalSize, smoothT);
 
             topBar.sizeDelta = new Vector2(
                 topBar.sizeDelta.x,
@@ -274,21 +329,9 @@ public class CameraSwitch : MonoBehaviour
             yield return null;
         }
 
-        movieCamera.orthographicSize = movieFinalSize;
-
         topBar.sizeDelta = new Vector2(topBar.sizeDelta.x, 0f);
         bottomBar.sizeDelta = new Vector2(bottomBar.sizeDelta.x, 0f);
 
-        isTransitioning = false;
-
-        if (interactionManager != null)
-        {
-            interactionManager.canInteract = true;
-            Debug.Log("交互已解锁！");
-        }
-        else
-        {
-            Debug.LogError("CameraSwitch 找不到 InteractionManager，请检查面板拖拽！");
-        }
+        Debug.Log("CameraSwitch: letterbox retract finished");
     }
 }

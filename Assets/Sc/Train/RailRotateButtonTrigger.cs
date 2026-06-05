@@ -444,8 +444,6 @@ public class RailRotateButtonTrigger : MonoBehaviour
         if (!useGamepadRumble)
             return;
 
-        if (Gamepad.current == null)
-            return;
 
         if (rumbleRoutine != null)
             StopCoroutine(rumbleRoutine);

@@ -33,7 +33,17 @@ public class RailPathAutoFlipByAngle : MonoBehaviour
         GreaterOrEqual,
         LessOrEqual,
         BetweenRange,
-        OutsideRange
+        OutsideRange,
+
+        // 新增：数值在任意一个范围内时，条件成立
+        InAnyRange
+    }
+
+    [System.Serializable]
+    public struct FloatRange
+    {
+        public float min;
+        public float max;
     }
 
     [Header("要翻转的 RailPath")]
@@ -73,6 +83,13 @@ public class RailPathAutoFlipByAngle : MonoBehaviour
 
     [Tooltip("BetweenRange / OutsideRange 使用。")]
     public float maxValue = 1f;
+
+    [Tooltip("InAnyRange 使用。数值在任意一个范围内时，条件成立。")]
+    public FloatRange[] ranges = new FloatRange[]
+    {
+        new FloatRange { min = 0f, max = 5f },
+        new FloatRange { min = 10f, max = 15f }
+    };
 
     [Header("翻转规则")]
     [Tooltip("勾选：条件成立时使用反向顺序。不勾：条件不成立时使用反向顺序。")]
@@ -258,14 +275,44 @@ public class RailPathAutoFlipByAngle : MonoBehaviour
                 return value <= targetValue + tolerance;
 
             case CompareMode.BetweenRange:
-                return value >= minValue - tolerance && value <= maxValue + tolerance;
+                {
+                    float min = Mathf.Min(minValue, maxValue);
+                    float max = Mathf.Max(minValue, maxValue);
+
+                    return value >= min - tolerance && value <= max + tolerance;
+                }
 
             case CompareMode.OutsideRange:
-                return value < minValue - tolerance || value > maxValue + tolerance;
+                {
+                    float min = Mathf.Min(minValue, maxValue);
+                    float max = Mathf.Max(minValue, maxValue);
+
+                    return value < min - tolerance || value > max + tolerance;
+                }
+
+            case CompareMode.InAnyRange:
+                return IsValueInsideAnyRange(value);
 
             default:
                 return false;
         }
+    }
+
+    bool IsValueInsideAnyRange(float value)
+    {
+        if (ranges == null || ranges.Length == 0)
+            return false;
+
+        for (int i = 0; i < ranges.Length; i++)
+        {
+            float min = Mathf.Min(ranges[i].min, ranges[i].max);
+            float max = Mathf.Max(ranges[i].min, ranges[i].max);
+
+            if (value >= min - tolerance && value <= max + tolerance)
+                return true;
+        }
+
+        return false;
     }
 
     float GetCurrentConditionValue()
