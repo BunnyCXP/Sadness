@@ -8258,7 +8258,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 08532b130cbada14e827a435bf6cfa3a, type: 3}
   m_Name: 
@@ -12325,7 +12325,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 2100000006}
         m_TargetAssemblyTypeName: FilmExitTrigger, Assembly-CSharp
-        m_MethodName: FinishFilmOne
+        m_MethodName: FinishFilmThree
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -69343,7 +69343,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 23668911ecc441e0a914265721bba264, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameFlowManager
-  currentChapterIndex: 1
+  currentChapterIndex: 3
   lastFinishedFilmIndex: 0
   chapterOneSceneName: L1
   chapterTwoSceneName: L2
@@ -69412,8 +69412,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77d1c710fa51494789ba75fd152f420a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ChapterRoomManager
-  chapterIndex: 1
-  filmIndexInThisChapter: 1
+  chapterIndex: 3
+  filmIndexInThisChapter: 3
   roomRoot: {fileID: 691006868}
   filmRoot: {fileID: 1345431108}
   roomCamera: {fileID: 330585545}
@@ -69426,7 +69426,7 @@ MonoBehaviour:
   discObject: {fileID: 0}
   nextClueObject: {fileID: 0}
   lightDoorObject: {fileID: 0}
-  thisChapterHasOpeningRoomSequence: 1
+  thisChapterHasOpeningRoomSequence: 0
   disableRoomInteractionOnReturnedChapters: 1
   enableRoomInputAfterReveal: 1
   roomInputEnabled: 0
@@ -69454,7 +69454,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6193ba4173254d1ab4314755e7e7646d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FilmExitTrigger
-  filmIndex: 1
+  filmIndex: 3
   transitionMode: 1
   finaleAlreadyHasWhiteCover: 1
   inheritLetterboxHeightFromFinale: 1
