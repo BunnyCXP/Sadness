@@ -24,16 +24,25 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
     public Transform ticketStartPoint;
     public Transform ticketViewPoint;
     public Transform ticketLookTarget;
-    public GameObject ticketFrontObject;
-    public GameObject ticketBackObject;
     public TMP_Text ticketBackText;
     public string ticketBackMessage = "let's look forward";
+
+    [Header("Simple Cube Ticket Flip")]
+    public bool useSimpleCubeFlip = true;
+    public float ticketFlipDuration = 0.7f;
+    public Vector3 simpleFlipEuler = new Vector3(0f, 180f, 0f);
+    public AnimationCurve simpleFlipCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
+    [Header("Ticket Withdraw")]
+    public Transform ticketExitPoint;
+    public float ticketWithdrawDuration = 0.65f;
+    public AnimationCurve ticketWithdrawCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+    public bool hideTicketAfterWithdraw = true;
 
     [Header("Timing")]
     public float lookDownDuration = 0.8f;
     public float ticketRaiseDuration = 0.8f;
     public float ticketHoldDuration = 0.6f;
-    public float ticketFlipDuration = 0.7f;
     public float afterFlipHoldDuration = 1.2f;
 
     [Header("Dialogue")]
@@ -50,17 +59,22 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
 
     private Coroutine sequenceRoutine;
     private Quaternion originalCameraRotation;
+    private Quaternion ticketFrontRotation;
+    private Quaternion ticketBackRotation;
+    private bool hasTicketFrontRotation;
     private bool listenerRegistered;
 
     void Awake()
     {
         ResolveReferences();
+        CaptureTicketFrontRotation();
         ResetTicketVisuals();
     }
 
     void OnEnable()
     {
         ResolveReferences();
+        CaptureTicketFrontRotation();
         RegisterListener();
     }
 
@@ -109,32 +123,39 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
         if (roomCamera != null)
             originalCameraRotation = roomCamera.transform.rotation;
 
-        if (ticketBackText != null)
-            ticketBackText.text = ticketBackMessage;
+        if (heldTicketObject != null)
+            heldTicketObject.SetActive(true);
 
-        SetTicketSides(true);
+        ResetTicketToFront();
 
         if (heldTicketObject != null)
         {
-            heldTicketObject.SetActive(true);
-
             Transform ticket = heldTicketObject.transform;
             Vector3 startPosition = ticketStartPoint != null ? ticketStartPoint.position : ticket.position;
-            Quaternion startRotation = ticketStartPoint != null ? ticketStartPoint.rotation : ticket.rotation;
             Vector3 viewPosition = ticketViewPoint != null ? ticketViewPoint.position : startPosition;
-            Quaternion viewRotation = ticketViewPoint != null ? ticketViewPoint.rotation : startRotation;
-            ticket.SetPositionAndRotation(startPosition, startRotation);
+            ticket.position = startPosition;
 
             yield return LookAtTicketRoutine();
-            yield return MoveTransformRoutine(ticket, startPosition, startRotation, viewPosition, viewRotation, ticketRaiseDuration);
+            yield return MoveTicketPositionRoutine(
+                ticket,
+                startPosition,
+                viewPosition,
+                ticketRaiseDuration
+            );
+
+            Debug.Log("Ticket sequence: arrived at view point", this);
+            Debug.Log(
+                "Ticket arrived view point. Held rotation=" + heldTicketObject.transform.eulerAngles,
+                this
+            );
+
+            if (useSimpleCubeFlip)
+                yield return SimpleFlipTicketCubeRoutine();
+
+            onTicketBackRevealed?.Invoke();
 
             if (ticketHoldDuration > 0f)
                 yield return new WaitForSeconds(ticketHoldDuration);
-
-            Quaternion flippedRotation = viewRotation * Quaternion.Euler(0f, 180f, 0f);
-            yield return MoveTransformRoutine(ticket, viewPosition, viewRotation, viewPosition, flippedRotation, ticketFlipDuration);
-            SetTicketSides(false);
-            onTicketBackRevealed?.Invoke();
 
             if (subtitlePlayer != null && ticketRevealLines != null && ticketRevealLines.Length > 0)
                 yield return subtitlePlayer.PlayLinesRoutine(ticketRevealLines);
@@ -145,7 +166,7 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
             if (subtitlePlayer != null && afterTicketLines != null && afterTicketLines.Length > 0)
                 yield return subtitlePlayer.PlayLinesRoutine(afterTicketLines);
 
-            heldTicketObject.SetActive(false);
+            yield return WithdrawTicketRoutine();
         }
 
         yield return RestoreCameraRoutine();
@@ -202,12 +223,10 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
         target.rotation = to;
     }
 
-    private IEnumerator MoveTransformRoutine(
+    private IEnumerator MoveTicketPositionRoutine(
         Transform target,
         Vector3 fromPosition,
-        Quaternion fromRotation,
         Vector3 toPosition,
-        Quaternion toRotation,
         float duration)
     {
         float elapsed = 0f;
@@ -217,14 +236,52 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = duration > 0f ? Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration)) : 1f;
-            target.SetPositionAndRotation(
-                Vector3.Lerp(fromPosition, toPosition, t),
-                Quaternion.Slerp(fromRotation, toRotation, t)
-            );
+            target.position = Vector3.Lerp(fromPosition, toPosition, t);
+
             yield return null;
         }
 
-        target.SetPositionAndRotation(toPosition, toRotation);
+        target.position = toPosition;
+    }
+
+    private IEnumerator WithdrawTicketRoutine()
+    {
+        if (heldTicketObject == null)
+            yield break;
+
+        if (ticketExitPoint == null)
+        {
+            Debug.LogWarning(
+                "ChapterArrivalTicketSequence: ticketExitPoint is missing, hiding ticket immediately.",
+                this
+            );
+            heldTicketObject.SetActive(false);
+            yield break;
+        }
+
+        Transform ticket = heldTicketObject.transform;
+        Vector3 fromPosition = ticket.position;
+        Vector3 toPosition = ticketExitPoint.position;
+        float duration = Mathf.Max(0f, ticketWithdrawDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = duration > 0f ? Mathf.Clamp01(elapsed / duration) : 1f;
+            float curved = ticketWithdrawCurve != null && ticketWithdrawCurve.length > 0
+                ? ticketWithdrawCurve.Evaluate(t)
+                : t;
+
+            ticket.position = Vector3.Lerp(fromPosition, toPosition, curved);
+
+            yield return null;
+        }
+
+        ticket.position = toPosition;
+
+        if (hideTicketAfterWithdraw)
+            heldTicketObject.SetActive(false);
     }
 
     private void RestoreRoomControl()
@@ -272,15 +329,69 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
         if (heldTicketObject != null)
             heldTicketObject.SetActive(false);
 
-        SetTicketSides(true);
+        ResetTicketToFront();
     }
 
-    private void SetTicketSides(bool showFront)
+    private void ResetTicketToFront()
     {
-        if (ticketFrontObject != null)
-            ticketFrontObject.SetActive(showFront);
-        if (ticketBackObject != null)
-            ticketBackObject.SetActive(!showFront);
+        CaptureTicketFrontRotation();
+
+        if (heldTicketObject != null && hasTicketFrontRotation)
+            heldTicketObject.transform.rotation = ticketFrontRotation;
+
+        ApplyTicketBackMessage();
+        Debug.Log("Ticket sequence: reset to FRONT", this);
+    }
+
+    private IEnumerator SimpleFlipTicketCubeRoutine()
+    {
+        if (heldTicketObject == null)
+            yield break;
+
+        Transform ticket = heldTicketObject.transform;
+        Quaternion startRotation = ticket.rotation;
+        Quaternion endRotation = ticketBackRotation;
+        float duration = Mathf.Max(0f, ticketFlipDuration);
+        float elapsed = 0f;
+
+        ApplyTicketBackMessage();
+        Debug.Log("Ticket sequence: simple cube flip start", this);
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float raw = duration > 0f ? Mathf.Clamp01(elapsed / duration) : 1f;
+            float t = simpleFlipCurve != null && simpleFlipCurve.length > 0
+                ? simpleFlipCurve.Evaluate(raw)
+                : raw;
+
+            ticket.rotation = Quaternion.Slerp(startRotation, endRotation, t);
+            yield return null;
+        }
+
+        ticket.rotation = endRotation;
+        Debug.Log("Ticket sequence: simple cube flip finished", this);
+    }
+
+    private void CaptureTicketFrontRotation()
+    {
+        if (hasTicketFrontRotation || heldTicketObject == null)
+            return;
+
+        ticketFrontRotation = heldTicketObject.transform.rotation;
+        ticketBackRotation = ticketFrontRotation * Quaternion.Euler(simpleFlipEuler);
+        hasTicketFrontRotation = true;
+    }
+
+    private void ApplyTicketBackMessage()
+    {
+        if (ticketBackText != null)
+        {
+            ticketBackText.text = ticketBackMessage;
+            return;
+        }
+
+        Debug.LogWarning("ChapterArrivalTicketSequence: ticketBackText is missing.", this);
     }
 
     [ContextMenu("Validate Setup")]
@@ -292,5 +403,9 @@ public class ChapterArrivalTicketSequence : MonoBehaviour
             Debug.LogWarning("ChapterArrivalTicketSequence: room references are incomplete.", this);
         if (heldTicketObject == null || ticketStartPoint == null || ticketViewPoint == null)
             Debug.LogWarning("ChapterArrivalTicketSequence: ticket presentation references are incomplete.", this);
+        if (ticketExitPoint == null)
+            Debug.LogWarning("ChapterArrivalTicketSequence: ticketExitPoint is missing.", this);
+        if (ticketBackText == null)
+            Debug.LogWarning("ChapterArrivalTicketSequence: ticketBackText is missing.", this);
     }
 }
